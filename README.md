@@ -45,6 +45,11 @@ sku.update_autobot_pricelist()  # Gets item schema from autobot.tf and updates t
 }
 ```
 
+## Installation
+```bash
+pip install tf2-sku-to-name
+```
+
 ## Acknowledgements
 [idinium96's tf2autobot](https://github.com/TF2Autobot/tf2autobot) for the item name schema\
-Inspired by [Niclason's node-tf2-sku](https://github.com/Nicklason/node-tf2-sku) and [TryHardDo's TF2Sku](https://github.com/TryHardDo/TF2Sku/tree/master)
+Inspired by [Nicklason's node-tf2-sku](https://github.com/Nicklason/node-tf2-sku) and [TryHardDo's TF2Sku](https://github.com/TryHardDo/TF2Sku/tree/master)
