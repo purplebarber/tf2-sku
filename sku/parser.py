@@ -160,3 +160,20 @@ class Sku:
 
         with open(DATA_FILE, "w") as f:
             dump(data, f, indent=2)
+
+    @staticmethod
+    def update_autobot_pricelist() -> None:
+        req = requests.get("https://autobot.tf/json/pricelist-array").json()
+        new_data_dict = {
+            "name": dict(),
+            "sku": dict()
+        }
+
+        for item in req.get("items"):
+            name = item.get("name")
+            sku = item.get("sku")
+            new_data_dict.get("name").update({name: sku})
+            new_data_dict.get("sku").update({sku: name})
+
+        with open(DATA_FILE, "w") as f:
+            dump(new_data_dict, f, indent=2)
