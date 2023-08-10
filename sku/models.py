@@ -22,7 +22,7 @@ class itemClass:
 
         # Update the properties with the provided data
         if data is not None:
-            self.__dict__.update(data) 
+            self.__dict__.update(data)
 
 
     def __str__(self):

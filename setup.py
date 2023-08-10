@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='tf2-sku-to-name',
-    version='1.0.4',
+    version='1.0.6',
     author='Purple Barber',
     description="A python library that parses TF2 item SKU to the item's name and vice versa.",
     url='https://github.com/purplebarber/tf2-sku',

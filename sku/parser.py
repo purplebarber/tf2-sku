@@ -3,10 +3,10 @@ from typing import List
 from collections import deque
 import requests
 from bs4 import BeautifulSoup as bs
-from json import load, dump
+import sqlite3
 import pkg_resources
 
-DATA_FILE = pkg_resources.resource_filename(__name__, 'data/data.json')
+DB_FILE = pkg_resources.resource_filename(__name__, 'data/data.db')
 
 
 class Sku:
@@ -139,42 +139,84 @@ class Sku:
         return title.lstrip()
 
     @staticmethod
+    def _create_tables_if_not_exist(conn):
+        cursor = conn.cursor()
+        # Create the "sku" and "name" tables if they don't exist
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS sku (
+                sku TEXT PRIMARY KEY,
+                name TEXT NOT NULL
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS name (
+                name TEXT PRIMARY KEY,
+                sku TEXT NOT NULL
+            )
+        """)
+        conn.commit()
+
+    @staticmethod
     def get_json_data(sku: str = str(), name: str = str()) -> str:
-        with open(DATA_FILE, "r") as f:
-            data = load(f)
+        conn = sqlite3.connect(DB_FILE)
+        Sku._create_tables_if_not_exist(conn)  # Ensure tables exist
+        cursor = conn.cursor()
 
         if sku:
-            return data.get("sku").get(sku)
+            cursor.execute("SELECT name FROM sku WHERE sku=?", (sku,))
+            result = cursor.fetchone()
+            return result[0] if result else ""
 
         if name:
-            return data.get("name").get(name)
+            cursor.execute("SELECT sku FROM name WHERE name=?", (name,))
+            result = cursor.fetchone()
+            return result[0] if result else ""
 
-        return str()
+        conn.close()
+        return ""
 
     @staticmethod
     def update_json_data(sku: str, name: str) -> None:
-        with open(DATA_FILE, "r") as f:
-            data = load(f)
+        conn = sqlite3.connect(DB_FILE)
+        Sku._create_tables_if_not_exist(conn)  # Ensure tables exist
+        cursor = conn.cursor()
 
-        data.get("sku").update({sku: name})
-        data.get("name").update({name: sku})
+        try:
+            cursor.execute("INSERT INTO sku (sku, name) VALUES (?, ?)", (sku, name))
+            cursor.execute("INSERT INTO name (name, sku) VALUES (?, ?)", (name, sku))
+        except sqlite3.IntegrityError:
+            # If the name already exists, update the corresponding sku instead of inserting
+            cursor.execute("UPDATE name SET sku=? WHERE name=?", (sku, name))
 
-        with open(DATA_FILE, "w") as f:
-            dump(data, f, indent=2)
+        conn.commit()
+        conn.close()
 
     @staticmethod
     def update_autobot_pricelist() -> None:
         req = requests.get("https://autobot.tf/json/pricelist-array").json()
-        new_data_dict = {
-            "name": dict(),
-            "sku": dict()
-        }
+
+        conn = sqlite3.connect(DB_FILE)
+        Sku._create_tables_if_not_exist(conn)  # Ensure tables exist
+        cursor = conn.cursor()
 
         for item in req.get("items"):
             name = item.get("name")
             sku = item.get("sku")
-            new_data_dict.get("name").update({name: sku})
-            new_data_dict.get("sku").update({sku: name})
 
-        with open(DATA_FILE, "w") as f:
-            dump(new_data_dict, f, indent=2)
+            # Check if the name already exists in the database
+            cursor.execute("SELECT sku FROM name WHERE name=?", (name,))
+            existing_sku = cursor.fetchone()
+
+            # If the name exists, update the existing entry
+            if existing_sku:
+                existing_sku = existing_sku[0]
+                if existing_sku != sku:
+                    # Update the SKU for the existing name
+                    cursor.execute("UPDATE name SET sku=? WHERE name=?", (sku, name))
+            else:
+                # If the name doesn't exist, insert a new entry
+                cursor.execute("INSERT OR IGNORE INTO name (name, sku) VALUES (?, ?)", (name, sku))
+                cursor.execute("INSERT OR IGNORE INTO sku (sku, name) VALUES (?, ?)", (sku, name))
+
+        conn.commit()
+        conn.close()

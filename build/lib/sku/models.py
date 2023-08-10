@@ -2,7 +2,7 @@ from json import dumps
 
 
 class itemClass:
-    def __init__(self):
+    def __init__(self, data=None):
         # Initialize the properties with their default values
         self.Defindex = 0
         self.Quality = 6
@@ -19,6 +19,11 @@ class itemClass:
         self.CrateSn = None
         self.Output = None
         self.OutputQuality = None
+
+        # Update the properties with the provided data
+        if data is not None:
+            self.__dict__.update(data)
+
 
     def __str__(self):
         # Serialize the object to a JSON string
