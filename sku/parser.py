@@ -2,7 +2,6 @@ from sku.models import itemClass as itemClass
 from typing import List
 from collections import deque
 import requests
-from bs4 import BeautifulSoup as bs
 import sqlite3
 import pkg_resources
 
@@ -115,28 +114,43 @@ class Sku:
             item.OutputQuality = int(attr[2:])
 
     @staticmethod
-    def sku_to_name(sku: str) -> str:
-        json_data = Sku.get_json_data(sku=sku)
-        if json_data:
-            return json_data
+    def sku_to_name(sku: str, proper_name: bool = True, force_use_autobot: bool = False) -> str:
+        if not force_use_autobot:
+            json_data = Sku.get_json_data(sku=sku)
+            if json_data:
+                return json_data
 
-        req = requests.get(f"https://www.tf2autobot.com/items/{sku}")
-        title = bs(req.text, "html.parser").find("title").text
+        url = requests.utils.quote(f"schema.autobot.tf/getName/fromSku/{sku}")
+        req = requests.get(f"https://{url}", params={"proper": "true" if proper_name else "false"})
+        if not req or req.status_code != 200:
+            raise ValueError(f"Failed to get name from SKU: {sku} from autobot.tf")
 
-        Sku.update_json_data(sku, title.lstrip())
-        return title.lstrip()
+        name = req.json().get("name")
+
+        if not name:
+            raise ValueError(f"Failed to get name from SKU: {sku} from autobot.tf")
+
+        Sku.update_json_data(sku, name)
+        return name
 
     @staticmethod
-    def name_to_sku(name: str) -> str:
-        json_data = Sku.get_json_data(name=name)
-        if json_data:
-            return json_data
+    def name_to_sku(name: str, force_use_autobot: bool = False) -> str:
+        if not force_use_autobot:
+            json_data = Sku.get_json_data(name=name)
+            if json_data:
+                return json_data
+        url = requests.utils.quote(f"schema.autobot.tf/getSku/fromName/{name}")
+        req = requests.get(f"https://{url}")
+        if not req or req.status_code != 200:
+            raise ValueError(f"Failed to get SKU from name: {name} from autobot.tf")
 
-        req = requests.get(f"https://www.tf2autobot.com/items/{name}")
-        title = bs(req.text, "html.parser").find("h3").text
+        sku = req.json().get("sku")
 
-        Sku.update_json_data(title.lstrip(), name)
-        return title.lstrip()
+        if not sku:
+            raise ValueError(f"Failed to get SKU from name: {name} from autobot.tf")
+
+        Sku.update_json_data(sku, name)
+        return sku
 
     @staticmethod
     def _create_tables_if_not_exist(conn):
