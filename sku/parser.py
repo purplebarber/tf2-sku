@@ -2,6 +2,7 @@ from sku.models import itemClass
 from sku.schema import Schema
 from typing import List
 from collections import deque
+import re
 
 # Initialize schema (will load from cache or fetch from autobot.tf by default)
 _schema = None
