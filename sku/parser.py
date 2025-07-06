@@ -149,7 +149,7 @@ class Sku:
         name = schema.get_name(item_dict, proper_name)
         if not name:
             raise ValueError(f"Failed to get name from SKU: {sku}")
-        
+
         return name
 
     @staticmethod
@@ -281,110 +281,56 @@ class Sku:
                     item['quality'] = quality_id
                     break
         
+        for effect_name, effect_id in schema.effects.items():
+            effect_lower = effect_name.lower()
 
-        effect_short_forms = {
-            'burning': 'Burning Flames',
-            'scorching': 'Scorching Flames',
-            'green energy': 'Green Energy',
-            'purple energy': 'Purple Energy',
-            'circling tf': 'Circling TF Logo',
-            'massed': 'Massed Flies',
-            'nuts': 'Nuts n\' Bolts',
-            'p fetti': 'Purple Confetti',
-            'g fetti': 'Green Confetti',
-            'haunted': 'Haunted Ghosts',
-            'green black hole': 'Green Black Hole',
-            'roboactive': 'Roboactive',
-            'sulph': 'Sulphurous',
-            'phos': 'Phosphorous',
-            'c&d': 'Circling Peace Sign',
-            'peace': 'Circling Peace Sign',
-            'logo': 'Circling TF Logo',
-            'hearts': 'Circling Heart',
-            'tf logo': 'Circling TF Logo',
-            'heart': 'Circling Heart',
-            'frostbite': 'Frostbite',
-            'scorching': 'Scorching Flames',
-            'plasma': 'Vivid Plasma',
-            'searing': 'Searing Plasma',
-            'miami': 'Miami Nights',
-            'disco': 'Disco Beat Down',
-            'phosph': 'Phosphorous',
-            'sulph': 'Sulphurous',
-            'memory': 'Memory Leak',
-            'overclocked': 'Overclocked',
-            'electrostatic': 'Electrostatic',
-            'harvest': 'Harvest Moon',
-            'bonzo': 'Bonzo The All-Gnawing',
-            'antifreeze': 'Anti-Freeze',
-            'arcana': 'Arcana',
-            'spellbound': 'Spellbound',
-        }
-        
-        for short_form, full_effect in effect_short_forms.items():
-            if short_form in name_lower:
-                for effect_name, effect_id in schema.effects.items():
-                    if effect_name == full_effect:
-                        name_lower = name_lower.replace(short_form, '').strip()
-                        item['effect'] = effect_id
-                        if item['quality'] != 5:
-                            item['quality2'] = item['quality'] or item['quality2']
-                            item['quality'] = 5
-                        break
-                if item['effect']:
-                    break
-        
-        if not item['effect']:
-            for effect_name, effect_id in schema.effects.items():
-                effect_lower = effect_name.lower()
-
-                if effect_lower == 'stardust' and 'starduster' in name_lower:
-                    if 'starduster' in name_lower.replace('stardust', ''):
-                        continue
-                
-                if effect_lower == 'showstopper' and 'taunt: ' not in name_lower and 'shred alert' not in name_lower:
+            if effect_lower == 'stardust' and 'starduster' in name_lower:
+                if 'starduster' in name_lower.replace('stardust', ''):
                     continue
-                
-                if effect_lower == 'smoking' and name_lower in ['smoking jacket', 'the smoking skid lid'] or 'smoking skid lid' in name_lower:
-                    if not name_lower.startswith('smoking smoking'):
-                        continue
-                
-                if effect_lower in ['haunted ghosts', 'pumpkin patch', 'stardust'] and item['wear']:
+            
+            if effect_lower == 'showstopper' and 'taunt: ' not in name_lower and 'shred alert' not in name_lower:
+                continue
+            
+            if effect_lower == 'smoking' and name_lower in ['smoking jacket', 'the smoking skid lid'] or 'smoking skid lid' in name_lower:
+                if not name_lower.startswith('smoking smoking'):
                     continue
+            
+            if effect_lower in ['haunted ghosts', 'pumpkin patch', 'stardust'] and item['wear']:
+                continue
+            
+            if effect_lower == 'atomic' and ('subatomic' in name_lower or any(x in name_lower for x in ['bonk! atomic punch', 'atomic accolade'])):
+                continue
+            
+            if effect_lower == 'spellbound' and ('taunt:' in name_lower or 'shred alert' in name_lower):
+                continue
+            
+            if effect_lower == 'accursed' and 'accursed apparition' in name_lower:
+                continue
+            
+            if effect_lower == 'haunted' and 'haunted kraken' in name_lower:
+                continue
+            
+            if effect_lower == 'frostbite' and 'frostbite bonnet' in name_lower:
+                continue
+            
+            if effect_lower == 'hot' and not item['wear']:
+                continue
+            
+            if effect_lower == 'cool' and not item['wear']:
+                continue
+            
+            if effect_lower in name_lower:
+                name_lower = name_lower.replace(effect_lower, '').strip()
+                item['effect'] = effect_id
                 
-                if effect_lower == 'atomic' and ('subatomic' in name_lower or any(x in name_lower for x in ['bonk! atomic punch', 'atomic accolade'])):
-                    continue
-                
-                if effect_lower == 'spellbound' and ('taunt:' in name_lower or 'shred alert' in name_lower):
-                    continue
-                
-                if effect_lower == 'accursed' and 'accursed apparition' in name_lower:
-                    continue
-                
-                if effect_lower == 'haunted' and 'haunted kraken' in name_lower:
-                    continue
-                
-                if effect_lower == 'frostbite' and 'frostbite bonnet' in name_lower:
-                    continue
-                
-                if effect_lower == 'hot' and not item['wear']:
-                    continue
-                
-                if effect_lower == 'cool' and not item['wear']:
-                    continue
-                
-                if effect_lower in name_lower:
-                    name_lower = name_lower.replace(effect_lower, '').strip()
-                    item['effect'] = effect_id
-                    
-                    if effect_id == 4:  # Community Sparkle
-                        if not item['quality']:
-                            item['quality'] = 5
-                    elif item['quality'] != 5:
-                        item['quality2'] = item['quality'] or item['quality2']
+                if effect_id == 4:  # Community Sparkle
+                    if not item['quality']:
                         item['quality'] = 5
-                    
-                    break
+                elif item['quality'] != 5:
+                    item['quality2'] = item['quality'] or item['quality2']
+                    item['quality'] = 5
+                
+                break
         
         if item['wear']:
             for paintkit_name, paintkit_id in schema.paintkits.items():
@@ -501,7 +447,7 @@ class Sku:
             item['craftnumber'] = int(number)
         
         return Sku._dict_to_sku(item)
-    
+
     @staticmethod
     def _process_special_items(name_lower: str, item: dict, schema: Schema) -> str:
 
@@ -585,7 +531,7 @@ class Sku:
                     break
         
         return name_lower
-    
+
     @staticmethod
     def _handle_weapon_skins(name_lower: str, item: dict, schema: Schema):
         """Handle weapon skin defindex mapping"""
@@ -617,7 +563,7 @@ class Sku:
             item['defindex'] = schema.WRENCH_SKINS[item['paintkit']]
         elif 'knife' in name_lower and item['paintkit'] in schema.KNIFE_SKINS:
             item['defindex'] = schema.KNIFE_SKINS[item['paintkit']]
-    
+
     @staticmethod
     def _dict_to_sku(item: dict) -> str:
         """Convert item dict to SKU string"""
@@ -639,7 +585,7 @@ class Sku:
         item_obj.OutputQuality = item['outputQuality']
         
         return Sku.object_to_sku(item_obj)
-    
+
     @staticmethod
     def update_schema(api_key: str = None, use_autobot: bool = True):
         global _schema

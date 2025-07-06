@@ -16,7 +16,7 @@ print(f"SKU: {sku3} -> Name: {name3}")
 
 # Example 2: Convert item name to SKU
 print("\n=== Name to SKU Examples ===")
-name4 = "Burning Team Captain"
+name4 = "Burning Flames Team Captain"
 sku4 = Sku.name_to_sku(name4)
 print(f"Name: {name4} -> SKU: {sku4}")
 
