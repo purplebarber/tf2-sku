@@ -1,48 +1,65 @@
 # tf2-sku
- A python library that parses TF2 item SKU to the item's name and vice versa
+
+A Python library for parsing Team Fortress 2 item SKUs to item names and vice versa.
 
 ## Features
-- Parses SKU to item's name
-- Parses item's name to SKU
-- Parses SKU to an item object
-- Parses an item object to SKU
+- Convert SKUs to item names
+- Convert item names to SKUs
 
-## Usage
-```python
-from sku.parser import Sku
+## Installation
 
-sku = Sku()
-print(sku.name_to_sku("Non-Craftable Tour of Duty Ticket"))  # 725;6;uncraftable
-print(sku.sku_to_name("725;6;uncraftable"))  # Non-Craftable Tour of Duty Ticket
-
-item_object = Sku.sku_to_object("725;6;uncraftable")
-print(item_object)  # prints the object as a JSON string
-print(Sku.object_to_sku(item_object))  # 725;6;uncraftable
-
-sku.update_autobot_pricelist()  # Gets item schema from autobot.tf and updates the json file
-# this is only needed if you want to update the data file (like after a TF2 game update)
-# otherwise, you can just use the data file that comes with the package
+```bash
+pip install tf2-sku-to-name
 ```
 
-## Model
-```json
-{
-  "Defindex": 725,
-  "Quality": 6,
-  "Craftable": false,
-  "Killstreak": 0,
-  "Australium": false,
-  "Festive": false,
-  "Effect": null,
-  "PaintKit": null,
-  "Wear": null,
-  "ElevatedQuality": null,
-  "Target": null,
-  "CraftNum": null,
-  "CrateSn": null,
-  "Output": null,
-  "OutputQuality": null
-}
+## Quick Start
+
+```python
+from sku import Sku
+
+# Convert SKU to name
+sku = "5021;6"
+name = Sku.sku_to_name(sku)
+print(name)  # Output: Mann Co. Supply Crate Key
+
+# Convert name to SKU
+name = "Burning Flames Team Captain"
+sku = Sku.name_to_sku(name)
+print(sku)  # Output: 378;5;u13
+
+# Working with item objects
+from sku import itemClass
+
+item = itemClass()
+item.Defindex = 424
+item.Quality = 11
+item.Killstreak = 3
+
+sku = Sku.object_to_sku(item)
+print(sku)  # Output: 424;11;kt-3
+```
+
+## Advanced Usage
+
+### Schema Management
+
+The library automatically manages TF2 schema data:
+
+```python
+from sku import get_schema, update_schema
+
+# Get the current schema instance
+schema = get_schema()
+
+# Access schema data
+item = schema.get_item_by_defindex(5021)
+print(item['item_name'])  # Mann Co. Supply Crate Key
+
+# Force update schema (by default uses autobot.tf)
+update_schema()
+
+# Or use Steam API (requires API key)
+update_schema(api_key="YOUR_STEAM_API_KEY", use_autobot=False)
 ```
 
 ## Installation
@@ -51,5 +68,6 @@ pip install tf2-sku-to-name
 ```
 
 ## Acknowledgements
+[TF2Autobot's node-tf2-schema](https://github.com/TF2Autobot/node-tf2-schema) for the original JavaScript implementation\
 [idinium96's tf2autobot](https://github.com/TF2Autobot/tf2autobot) for the item name schema\
 Inspired by [Nicklason's node-tf2-sku](https://github.com/Nicklason/node-tf2-sku) and [TryHardDo's TF2Sku](https://github.com/TryHardDo/TF2Sku/tree/master)
