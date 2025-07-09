@@ -291,7 +291,7 @@ class Sku:
             if effect_lower == 'showstopper' and 'taunt: ' not in name_lower and 'shred alert' not in name_lower:
                 continue
             
-            if effect_lower == 'smoking' and name_lower in ['smoking jacket', 'the smoking skid lid'] or 'smoking skid lid' in name_lower:
+            if effect_lower == 'smoking' and ('smoking skid lid' in name_lower or name_lower in ['smoking jacket', 'the smoking skid lid']):
                 if not name_lower.startswith('smoking smoking'):
                     continue
             
