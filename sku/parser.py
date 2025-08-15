@@ -285,7 +285,7 @@ class Sku:
             effect_lower = effect_name.lower()
 
             if effect_lower == 'stardust' and 'starduster' in name_lower:
-                if 'starduster' in name_lower.replace('stardust', ''):
+                if name_lower == 'starduster':
                     continue
             
             if effect_lower == 'showstopper' and 'taunt: ' not in name_lower and 'shred alert' not in name_lower:
