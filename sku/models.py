@@ -1,9 +1,25 @@
 from json import dumps
+from typing import Optional
 
 
 class itemClass:
-    def __init__(self, data=None):
-        # Initialize the properties with their default values
+    Defindex: int
+    Quality: int
+    Craftable: bool
+    Killstreak: int
+    Australium: bool
+    Festive: bool
+    Effect: Optional[int]
+    PaintKit: Optional[int]
+    Wear: Optional[int]
+    ElevatedQuality: Optional[int]
+    Target: Optional[int]
+    CraftNum: Optional[int]
+    CrateSn: Optional[int]
+    Output: Optional[int]
+    OutputQuality: Optional[int]
+
+    def __init__(self, data: Optional[dict] = None):
         self.Defindex = 0
         self.Quality = 6
         self.Craftable = True
@@ -20,11 +36,8 @@ class itemClass:
         self.Output = None
         self.OutputQuality = None
 
-        # Update the properties with the provided data
         if data is not None:
             self.__dict__.update(data)
 
-
-    def __str__(self):
-        # Serialize the object to a JSON string
+    def __str__(self) -> str:
         return dumps(self.__dict__)
