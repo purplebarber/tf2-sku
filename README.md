@@ -1,6 +1,6 @@
 # tf2-sku
 
-A Python library for parsing Team Fortress 2 item SKUs to item names and vice versa.
+A Python library for parsing Team Fortress 2 item SKUs to item names and vice versa (now super fast!).
 
 ## Features
 - Convert SKUs to item names
