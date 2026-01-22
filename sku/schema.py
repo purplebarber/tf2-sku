@@ -1,10 +1,25 @@
 import json
 import time
+import re
 from typing import Dict, Optional, List, Tuple
 from pathlib import Path
 
 
 class Schema:
+    ITEM_NAME_OVERRIDES_BY_DEFINDEX: Dict[int, str] = {}
+
+    HAUNTED_WICK_QUALITY_DEFINDEXES = {
+        30623, 30682, 30769, 30779, 30823, 30836, 30863, 30866, 30893, 30897,
+        30911, 30936, 30964, 30969, 30977, 30979, 30987, 30993, 31041, 31066,
+        31072, 31074, 31094, 31112, 31130, 31165, 31197, 31212, 31218, 31246,
+        31255, 31256, 31262, 31271, 31284, 31294, 31298, 31304, 31308, 31310,
+        31312, 31313,
+    }
+
+    SKIP_UNUSUAL_QUALITY_PREFIX_DEFINDEXES = {266, 267, 9258}
+
+    FORCE_CRATE_SERIES_SUFFIX_DEFINDEXES = {5627, 5735, 5742, 5752, 5774, 5781, 5802, 5803, 5859, 5942}
+
     PAINT_MAPPINGS = {
         '(paint: color no. 216-190-216)': 3100495,
         '(paint: a color similar to slate)': 3100495,
@@ -201,6 +216,8 @@ class Schema:
         self.crate_series_list = self._get_crate_series_list()
         self.qualities = self._get_qualities()
         self.effects = self._get_particle_effects()
+        if self.effects.get('Cremation') == 3130:
+            self.effects['Haunted Cremation'] = 3130
         self.paintkits = self._get_paint_kits()
         self.paints = self._get_paints()
         self._build_parsing_indexes()
@@ -313,7 +330,11 @@ class Schema:
     
     def get_item_by_item_name(self, name: str) -> Optional[Dict]:
         self._ensure_item_name_indexes()
-        return self._item_by_item_name.get(name.lower())
+        key = name.lower()
+        item = self._item_by_item_name.get(key)
+        if item:
+            return item
+        return self._item_by_item_name_normalized.get(self._normalize_item_name_key(key))
     
     def get_item_by_item_name_with_the(self, name: str) -> Optional[Dict]:
         self._ensure_item_name_indexes()
@@ -321,14 +342,25 @@ class Schema:
         name_lower = name.lower()
         if 'the ' in name_lower:
             name_lower = name_lower.replace('the ', '').strip()
-        return self._item_by_item_name_with_the.get(name_lower)
+
+        item = self._item_by_item_name_with_the.get(name_lower)
+        if item:
+            return item
+        return self._item_by_item_name_with_the_normalized.get(self._normalize_item_name_key(name_lower))
 
     def _ensure_item_name_indexes(self) -> None:
-        if hasattr(self, '_item_by_item_name') and hasattr(self, '_item_by_item_name_with_the'):
+        if (
+            hasattr(self, '_item_by_item_name')
+            and hasattr(self, '_item_by_item_name_with_the')
+            and hasattr(self, '_item_by_item_name_normalized')
+            and hasattr(self, '_item_by_item_name_with_the_normalized')
+        ):
             return
 
         item_by_item_name: Dict[str, Dict] = {}
         item_by_item_name_with_the: Dict[str, Dict] = {}
+        item_by_item_name_normalized: Dict[str, Dict] = {}
+        item_by_item_name_with_the_normalized: Dict[str, Dict] = {}
 
         for item in self.raw['schema']['items']:
             if item['item_name'] == 'Name Tag' and item['defindex'] == 2093:
@@ -339,12 +371,38 @@ class Schema:
 
             key = item['item_name'].lower()
             item_by_item_name.setdefault(key, item)
+            item_by_item_name_normalized.setdefault(self._normalize_item_name_key(key), item)
 
             key_with_the = key.replace('the ', '').strip() if 'the ' in key else key
             item_by_item_name_with_the.setdefault(key_with_the, item)
+            item_by_item_name_with_the_normalized.setdefault(self._normalize_item_name_key(key_with_the), item)
 
         self._item_by_item_name = item_by_item_name
         self._item_by_item_name_with_the = item_by_item_name_with_the
+        self._item_by_item_name_normalized = item_by_item_name_normalized
+        self._item_by_item_name_with_the_normalized = item_by_item_name_with_the_normalized
+
+        blindin = self.get_item_by_defindex(31534)
+        if blindin:
+            item_by_item_name_normalized.setdefault(self._normalize_item_name_key("Blindin' Bonnett".lower()), blindin)
+            item_by_item_name_with_the_normalized.setdefault(self._normalize_item_name_key("Blindin' Bonnett".lower()), blindin)
+
+    _NAME_KEY_TRANSLATE = str.maketrans({
+        "\u2018": "'",
+        "\u2019": "'",
+        "\u201c": '"',
+        "\u201d": '"',
+        "\u2013": "-",
+        "\u2014": "-",
+    })
+    _NAME_KEY_CLEAN_RE = re.compile(r"[^a-z0-9]+")
+
+    @classmethod
+    def _normalize_item_name_key(cls, name: str) -> str:
+        s = name.lower().translate(cls._NAME_KEY_TRANSLATE)
+        s = s.replace("'", "")  # normalize apostrophe variants (e.g. Balkan's -> Balkans)
+        s = cls._NAME_KEY_CLEAN_RE.sub(" ", s)
+        return " ".join(s.split())
     
     def get_quality_by_id(self, quality_id: int) -> Optional[str]:
         qualities = self.raw['schema']['qualities']
@@ -368,6 +426,9 @@ class Schema:
         return None
     
     def get_effect_by_id(self, effect_id: int) -> Optional[str]:
+        if effect_id == 3130:
+            return 'Haunted Cremation'
+
         particles = self.raw['schema']['attribute_controlled_attached_particles']
         
         start, end = 0, len(particles) - 1
@@ -584,6 +645,30 @@ class Schema:
         schema_item = self.get_item_by_defindex(item['defindex'])
         if not schema_item:
             return None
+
+        schema_item_name = self.ITEM_NAME_OVERRIDES_BY_DEFINDEX.get(item['defindex'], schema_item['item_name'])
+
+        # Match expected prefix ordering for basic uncraftable killstreak weapons.
+        if (
+            not scm_format
+            and not item.get('craftable', True)
+            and item.get('killstreak', 0) > 0
+            and schema_item.get('item_class', '') != 'tool'
+            and item.get('quality', 6) == 6
+            and not any([
+                item.get('effect'), item.get('australium'), item.get('festive'), item.get('wear'),
+                item.get('paintkit'), item.get('quality2'), item.get('target'),
+                item.get('crateseries') is not None, item.get('craftnumber') is not None,
+                item.get('output'), item.get('outputQuality'), item.get('paint')
+            ])
+        ):
+            ks_names = ['Killstreak', 'Specialized Killstreak', 'Professional Killstreak']
+            name = f"{ks_names[item['killstreak'] - 1]} "
+            if not item.get('tradable', True):
+                name += 'Non-Tradable '
+            name += 'Non-Craftable '
+            name += schema_item_name
+            return name
         
         name = ''
         
@@ -598,16 +683,24 @@ class Schema:
             elevated_suffix = '(e)' if not scm_format and (item.get('wear') or item.get('paintkit')) else ''
             name += f"{quality2_name}{elevated_suffix} "
         
+        skip_unusual_prefix = item.get('defindex') in self.SKIP_UNUSUAL_QUALITY_PREFIX_DEFINDEXES
+        if item.get('defindex') == 9258 and item.get('target'):
+            skip_unusual_prefix = False
+
         should_add_quality = (
             (item.get('quality') == 6 and item.get('quality2')) or
             (item.get('quality') not in [6, 15, 5]) or
-            (item.get('quality') == 5 and not item.get('effect')) or
+            (item.get('quality') == 5 and not item.get('effect') and not skip_unusual_prefix) or
             (item.get('quality') == 5 and scm_format) or
-            schema_item.get('item_quality') == 5
+            (schema_item.get('item_quality') == 5 and not skip_unusual_prefix)
         )
         
         if should_add_quality:
-            name += f"{self.get_quality_by_id(item.get('quality', 6))} "
+            quality_id = item.get('quality', 6)
+            if quality_id == 13 and item.get('defindex') in self.HAUNTED_WICK_QUALITY_DEFINDEXES:
+                name += "Haunted Wick "
+            else:
+                name += f"{self.get_quality_by_id(quality_id)} "
         
         if not scm_format and item.get('effect'):
             name += f"{self.get_effect_by_id(item['effect'])} "
@@ -619,10 +712,14 @@ class Schema:
             ks_names = ['Killstreak', 'Specialized Killstreak', 'Professional Killstreak']
             name += f"{ks_names[item['killstreak'] - 1]} "
         
+        strangifier_target_number: Optional[int] = None
         if item.get('target'):
-            target_item = self.get_item_by_defindex(item['target'])
-            if target_item:
-                name += f"{target_item['item_name']} "
+            if item.get('defindex') == 6522 and not scm_format:
+                strangifier_target_number = item['target']
+            else:
+                target_item = self.get_item_by_defindex(item['target'])
+                if target_item:
+                    name += f"{target_item['item_name']} "
         
         if item.get('outputQuality') and item['outputQuality'] != 6:
             name = f"{self.get_quality_by_id(item['outputQuality'])} {name}"
@@ -647,21 +744,28 @@ class Schema:
         if str(item['defindex']) in self.RETIRED_KEYS:
             name += self.RETIRED_KEYS[str(item['defindex'])]['name']
         else:
-            name += schema_item['item_name']
+            name += schema_item_name
+
+        if strangifier_target_number is not None:
+            name += f" #{strangifier_target_number}"
         
         if item.get('wear'):
             wear_names = ['Factory New', 'Minimal Wear', 'Field-Tested', 'Well-Worn', 'Battle Scarred']
             name += f" ({wear_names[item['wear'] - 1]})"
         
-        if item.get('crateseries'):
-            has_attr = (schema_item.get('attributes') and 
-                       schema_item['attributes'][0].get('class') == 'supply_crate_series')
-            if has_attr:
-                if scm_format:
-                    name += f" Series %23{item['crateseries']}"
-                else:
-                    name += f" #{item['crateseries']}"
-        elif item.get('craftnumber'):
+        if item.get('crateseries') is not None:
+            crateseries = item['crateseries']
+            default_series = self.crate_series_list.get(item['defindex'])
+            if scm_format:
+                name += f" Series %23{crateseries}"
+            else:
+                if (
+                    item.get('defindex') in self.FORCE_CRATE_SERIES_SUFFIX_DEFINDEXES
+                    or default_series is None
+                    or crateseries != default_series
+                ):
+                    name += f" #{crateseries}"
+        elif item.get('craftnumber') is not None:
             name += f" #{item['craftnumber']}"
         
         if not scm_format and item.get('paint'):

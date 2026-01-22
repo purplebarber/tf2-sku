@@ -126,6 +126,12 @@ class Sku:
         """Convert SKU to item name using the schema"""
         item = Sku.sku_to_object(sku)
         schema = get_schema()
+
+        if item.Quality == 255:
+            item.Quality = 6
+            item.Target = None
+            item.Output = None
+            item.OutputQuality = None
         
         item_dict = {
             'defindex': item.Defindex,
@@ -235,6 +241,13 @@ class Sku:
         if 'non-tradable' in name_lower:
             name_lower = name_lower.replace('non-tradable', '').strip()
             item['tradable'] = False
+
+        if name_lower.startswith('haunted wick '):
+            remainder = name_lower[len('haunted wick '):].strip()
+            remainder_item = schema.get_item_by_item_name_with_the(remainder)
+            if remainder_item and remainder_item.get('defindex') in {30987, 31308}:
+                item['quality'] = 13
+                name_lower = remainder
         
         if 'unusualifier' in name_lower:
             name_lower = name_lower.replace('unusual ', '').replace(' unusualifier', '').strip()
@@ -589,10 +602,16 @@ class Sku:
         elif item['paintkit'] and 'war paint' in name_lower:
             if not item['quality']:
                 item['quality'] = 15
-            if item.get('_is_mkii'):
-                item['defindex'] = 16000 + item['paintkit']
+            paintkit = item['paintkit']
+            defindex_mk2 = 16000 + paintkit
+            defindex_mk1 = 17000 + paintkit
+
+            if schema.get_item_by_defindex(defindex_mk2):
+                item['defindex'] = defindex_mk2
+            elif schema.get_item_by_defindex(defindex_mk1):
+                item['defindex'] = defindex_mk1
             else:
-                item['defindex'] = 17000 + item['paintkit']
+                item['defindex'] = defindex_mk2 if item.get('_is_mkii') else defindex_mk1
         
         return name_lower
 
