@@ -1,7 +1,6 @@
 import json
 import time
-import requests
-from typing import Dict, Optional
+from typing import Dict, Optional, List, Tuple
 from pathlib import Path
 
 
@@ -204,6 +203,28 @@ class Schema:
         self.effects = self._get_particle_effects()
         self.paintkits = self._get_paint_kits()
         self.paints = self._get_paints()
+        self._build_parsing_indexes()
+
+    def _build_parsing_indexes(self) -> None:
+        effects_by_len_desc = [
+            (effect_name.lower(), effect_id) for effect_name, effect_id in self.effects.items()
+        ]
+        effects_by_len_desc.sort(key=lambda kv: len(kv[0]), reverse=True)
+        self.effects_by_len_desc = effects_by_len_desc
+        self.haunted_effect_prefixes = tuple(
+            effect_name for effect_name, _ in effects_by_len_desc if effect_name.startswith("haunted ")
+        )
+        effects_by_first_token: Dict[str, List[Tuple[str, int]]] = {}
+        for effect_name, effect_id in effects_by_len_desc:
+            first_token = effect_name.split(" ", 1)[0]
+            effects_by_first_token.setdefault(first_token, []).append((effect_name, effect_id))
+        self.effects_by_first_token = effects_by_first_token
+
+        self.paintkits_lower = [
+            (paintkit_name.lower(), paintkit_id) for paintkit_name, paintkit_id in self.paintkits.items()
+        ]
+
+        self.retired_keys_by_name = {v["name"].lower(): v for v in self.RETIRED_KEYS.values()}
     
     def _load_from_cache(self) -> bool:
         if not self.SCHEMA_CACHE_FILE.exists():
@@ -245,6 +266,14 @@ class Schema:
     
     def _fetch_from_autobot(self):
         try:
+            try:
+                import requests  # type: ignore
+            except ModuleNotFoundError as e:
+                raise ModuleNotFoundError(
+                    "Optional dependency 'requests' is required to fetch the TF2 schema. "
+                    "Install it (e.g. `pip install requests`) or provide a cached schema."
+                ) from e
+
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
             }
@@ -283,42 +312,39 @@ class Schema:
         return None
     
     def get_item_by_item_name(self, name: str) -> Optional[Dict]:
-        name_lower = name.lower()
-        
-        for item in self.raw['schema']['items']:
-            if name_lower == item['item_name'].lower():
-                if item['item_name'] == 'Name Tag' and item['defindex'] == 2093:
-                    continue
-                
-                if item.get('item_quality', 0) == 0:
-                    continue
-                
-                return item
-        
-        return None
+        self._ensure_item_name_indexes()
+        return self._item_by_item_name.get(name.lower())
     
     def get_item_by_item_name_with_the(self, name: str) -> Optional[Dict]:
+        self._ensure_item_name_indexes()
+
         name_lower = name.lower()
-        
         if 'the ' in name_lower:
             name_lower = name_lower.replace('the ', '').strip()
-        
-        for item in self.raw['schema']['items']:
-            item_name = item['item_name'].lower()
-            
-            if 'the ' in item_name:
-                item_name = item_name.replace('the ', '').strip()
-            
-            if name_lower == item_name:
-                if item['item_name'] == 'Name Tag' and item['defindex'] == 2093:
-                    continue
+        return self._item_by_item_name_with_the.get(name_lower)
 
-                if item.get('item_quality', 0) == 0:
-                    continue
-                
-                return item
-        
-        return None
+    def _ensure_item_name_indexes(self) -> None:
+        if hasattr(self, '_item_by_item_name') and hasattr(self, '_item_by_item_name_with_the'):
+            return
+
+        item_by_item_name: Dict[str, Dict] = {}
+        item_by_item_name_with_the: Dict[str, Dict] = {}
+
+        for item in self.raw['schema']['items']:
+            if item['item_name'] == 'Name Tag' and item['defindex'] == 2093:
+                continue
+
+            if item.get('item_quality', 0) == 0:
+                continue
+
+            key = item['item_name'].lower()
+            item_by_item_name.setdefault(key, item)
+
+            key_with_the = key.replace('the ', '').strip() if 'the ' in key else key
+            item_by_item_name_with_the.setdefault(key_with_the, item)
+
+        self._item_by_item_name = item_by_item_name
+        self._item_by_item_name_with_the = item_by_item_name_with_the
     
     def get_quality_by_id(self, quality_id: int) -> Optional[str]:
         qualities = self.raw['schema']['qualities']
@@ -630,11 +656,11 @@ class Schema:
         if item.get('crateseries'):
             has_attr = (schema_item.get('attributes') and 
                        schema_item['attributes'][0].get('class') == 'supply_crate_series')
-            if scm_format:
-                if has_attr:
+            if has_attr:
+                if scm_format:
                     name += f" Series %23{item['crateseries']}"
-            else:
-                name += f" #{item['crateseries']}"
+                else:
+                    name += f" #{item['crateseries']}"
         elif item.get('craftnumber'):
             name += f" #{item['craftnumber']}"
         

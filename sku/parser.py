@@ -6,6 +6,7 @@ import re
 
 # Initialize schema (will load from cache or fetch from autobot.tf by default)
 _schema = None
+_CRAFT_NUMBER_RE = re.compile(r"#(\d+)")
 
 def get_schema(api_key=None, use_autobot=True):
     """Get or initialize the schema instance"""
@@ -158,7 +159,7 @@ class Sku:
         
         # Convert name to lowercase for processing
         name = name.strip()
-        name_lower = name.lower()
+        name_lower = name.lower().replace(''', "'").replace(''', "'")
         
         # Initialize item dict
         item = {
@@ -183,7 +184,20 @@ class Sku:
         
         if any(x in name_lower for x in ['strange part:', 'strange cosmetic part:', 'strange filter:', 
                                          'strange count transfer tool', 'strange bacon grease']):
-            schema_item = schema.get_item_by_item_name(name)
+            cleaned_name = name
+            cleaned_lower = name_lower.replace('untradeable', 'non-tradable').replace('untradable', 'non-tradable')
+            cleaned_lower = cleaned_lower.replace('uncraftable', 'non-craftable')
+
+            if cleaned_lower.startswith('non-tradable '):
+                item['tradable'] = False
+                cleaned_name = cleaned_name[len('non-tradable '):].lstrip()
+                cleaned_lower = cleaned_lower[len('non-tradable '):].lstrip()
+
+            if cleaned_lower.startswith('non-craftable '):
+                item['craftable'] = False
+                cleaned_name = cleaned_name[len('non-craftable '):].lstrip()
+
+            schema_item = schema.get_item_by_item_name_with_the(cleaned_name)
             if schema_item:
                 item['defindex'] = schema_item['defindex']
                 item['quality'] = schema_item.get('item_quality', 6)
@@ -244,6 +258,9 @@ class Sku:
                 name_lower = name_lower.replace(ks_text + ' ', '').strip()
                 item['killstreak'] = ks_value
                 break
+
+        if item['killstreak'] == 0 and 'kit fabricator' in name_lower:
+            item['killstreak'] = 2
         
         if 'australium' in name_lower and 'australium gold' not in name_lower:
             name_lower = name_lower.replace('australium', '').strip()
@@ -261,9 +278,18 @@ class Sku:
         
         quality_search = name_lower
         for ex in exception:
-            if ex in name_lower:
-                quality_search = name_lower.replace(ex, '').strip()
-                break
+            idx = name_lower.find(ex)
+            if idx == -1:
+                continue
+
+            before = name_lower[idx - 1] if idx > 0 else ' '
+            after_index = idx + len(ex)
+            after = name_lower[after_index] if after_index < len(name_lower) else ' '
+            if before.isalnum() or after.isalnum():
+                continue
+
+            quality_search = (name_lower[:idx] + name_lower[after_index:]).strip()
+            break
         
         if quality_search not in exception:
             for quality_name, quality_id in schema.qualities.items():
@@ -274,53 +300,86 @@ class Sku:
                 
                 if quality_lower == 'community' and quality_search.startswith('community sparkle'):
                     continue
+
+                if quality_lower == 'haunted':
+                    if schema.haunted_effect_prefixes and any(
+                        quality_search.startswith(effect) for effect in schema.haunted_effect_prefixes
+                    ):
+                        continue
                 
                 if quality_search.startswith(quality_lower):
-                    name_lower = name_lower.replace(quality_lower, '').strip()
+                    name_lower = name_lower.replace(quality_lower, '', 1).strip()
                     item['quality2'] = item['quality']
                     item['quality'] = quality_id
                     break
         
-        for effect_name, effect_id in schema.effects.items():
-            effect_lower = effect_name.lower()
+        first_token, has_space, remainder = name_lower.partition(' ')
+        effect_candidates_primary = schema.effects_by_first_token.get(first_token)
+        effect_candidates_secondary = None
+        if first_token == 'the' and has_space:
+            second_token = remainder.partition(' ')[0]
+            effect_candidates_secondary = schema.effects_by_first_token.get(second_token)
 
-            if effect_lower == 'stardust' and 'starduster' in name_lower:
-                if name_lower == 'starduster':
+        candidate_lists = []
+        if effect_candidates_primary:
+            candidate_lists.append(effect_candidates_primary)
+        if effect_candidates_secondary and effect_candidates_secondary is not effect_candidates_primary:
+            candidate_lists.append(effect_candidates_secondary)
+        if not candidate_lists and item.get('quality') == 5:
+            candidate_lists.append(schema.effects_by_len_desc)
+
+        effect_found = False
+        for effect_candidates in candidate_lists:
+            for effect_lower, effect_id in effect_candidates:
+                if effect_lower == 'stardust' and 'starduster' in name_lower:
+                    if name_lower == 'starduster':
+                        continue
+
+                if effect_lower == 'showstopper' and 'taunt: ' not in name_lower and 'shred alert' not in name_lower:
                     continue
-            
-            if effect_lower == 'showstopper' and 'taunt: ' not in name_lower and 'shred alert' not in name_lower:
-                continue
-            
-            if effect_lower == 'smoking' and ('smoking skid lid' in name_lower or name_lower in ['smoking jacket', 'the smoking skid lid']):
-                if not name_lower.startswith('smoking smoking'):
+
+                if effect_lower == 'smoking' and (
+                    'smoking skid lid' in name_lower or name_lower in ['smoking jacket', 'the smoking skid lid']
+                ):
+                    if not name_lower.startswith('smoking smoking'):
+                        continue
+
+                if effect_lower in ['haunted ghosts', 'pumpkin patch', 'stardust'] and item['wear']:
                     continue
-            
-            if effect_lower in ['haunted ghosts', 'pumpkin patch', 'stardust'] and item['wear']:
-                continue
-            
-            if effect_lower == 'atomic' and ('subatomic' in name_lower or any(x in name_lower for x in ['bonk! atomic punch', 'atomic accolade'])):
-                continue
-            
-            if effect_lower == 'spellbound' and ('taunt:' in name_lower or 'shred alert' in name_lower):
-                continue
-            
-            if effect_lower == 'accursed' and 'accursed apparition' in name_lower:
-                continue
-            
-            if effect_lower == 'haunted' and 'haunted kraken' in name_lower:
-                continue
-            
-            if effect_lower == 'frostbite' and 'frostbite bonnet' in name_lower:
-                continue
-            
-            if effect_lower == 'hot' and not item['wear']:
-                continue
-            
-            if effect_lower == 'cool' and not item['wear']:
-                continue
-            
-            if effect_lower in name_lower:
-                name_lower = name_lower.replace(effect_lower, '').strip()
+
+                if effect_lower == 'atomic' and (
+                    'subatomic' in name_lower
+                    or any(x in name_lower for x in ['bonk! atomic punch', 'atomic accolade'])
+                ):
+                    continue
+
+                if effect_lower == 'spellbound' and ('taunt:' in name_lower or 'shred alert' in name_lower):
+                    continue
+
+                if effect_lower == 'accursed' and 'accursed apparition' in name_lower:
+                    continue
+
+                if effect_lower == 'haunted' and 'haunted kraken' in name_lower:
+                    continue
+
+                if effect_lower == 'frostbite' and 'frostbite bonnet' in name_lower:
+                    continue
+
+                idx = name_lower.find(effect_lower)
+                if idx == -1:
+                    continue
+
+                before = name_lower[idx - 1] if idx > 0 else ' '
+                after_index = idx + len(effect_lower)
+                after = name_lower[after_index] if after_index < len(name_lower) else ' '
+                if before.isalnum() or after.isalnum():
+                    continue
+
+                candidate_name_lower = (name_lower[:idx] + name_lower[after_index:]).strip()
+                if item['wear'] is None and not schema.get_item_by_item_name_with_the(candidate_name_lower):
+                    continue
+
+                name_lower = candidate_name_lower
                 item['effect'] = effect_id
                 
                 if effect_id == 4:  # Community Sparkle
@@ -329,13 +388,15 @@ class Sku:
                 elif item['quality'] != 5:
                     item['quality2'] = item['quality'] or item['quality2']
                     item['quality'] = 5
-                
+
+                effect_found = True
+                break
+
+            if effect_found:
                 break
         
         if item['wear']:
-            for paintkit_name, paintkit_id in schema.paintkits.items():
-                paintkit_lower = paintkit_name.lower()
-                
+            for paintkit_lower, paintkit_id in schema.paintkits_lower:
                 if 'mk.ii' in name_lower and 'mk.ii' not in paintkit_lower:
                     continue
                 
@@ -346,6 +407,7 @@ class Sku:
                     continue
                 
                 if paintkit_lower in name_lower:
+                    item['_is_mkii'] = 'mk.ii' in paintkit_lower
                     name_lower = name_lower.replace(paintkit_lower, '').replace(' | ', '').strip()
                     item['paintkit'] = paintkit_id
                     
@@ -397,14 +459,7 @@ class Sku:
         
         elif 'mann co. supply crate #' in name_lower:
             crateseries = int(name_lower[23:])
-            
-            if crateseries in [1, 3, 7, 12, 13, 18, 19, 23, 26, 31, 34, 39, 43, 47, 54, 57, 75]:
-                item['defindex'] = 5022
-            elif crateseries in [2, 4, 8, 11, 14, 17, 20, 24, 27, 32, 37, 42, 44, 49, 56, 71, 76]:
-                item['defindex'] = 5041
-            elif crateseries in [5, 9, 10, 15, 16, 21, 25, 28, 29, 33, 38, 41, 45, 55, 59, 77]:
-                item['defindex'] = 5045
-            
+            item['defindex'] = 5022
             item['crateseries'] = crateseries
             item['quality'] = 6
             return Sku._dict_to_sku(item)
@@ -418,25 +473,36 @@ class Sku:
         
         number = None
         if '#' in name_lower:
-            match = re.search(r'#(\d+)', name_lower)
+            match = _CRAFT_NUMBER_RE.search(name_lower)
             if match:
                 number = match.group(1)
-                name_lower = re.sub(r'#\d+', '', name_lower).strip()
-        
-        retired_key_names = [key['name'].lower() for key in schema.RETIRED_KEYS.values()]
-        if name_lower in retired_key_names:
-            for key in schema.RETIRED_KEYS.values():
-                if key['name'].lower() == name_lower:
-                    item['defindex'] = key['defindex']
-                    item['quality'] = item['quality'] or 6
-                    return Sku._dict_to_sku(item)
+                name_lower = _CRAFT_NUMBER_RE.sub('', name_lower).strip()
+
+        retired_key = schema.retired_keys_by_name.get(name_lower)
+        if retired_key:
+            item['defindex'] = retired_key['defindex']
+            item['quality'] = item['quality'] or 6
+            return Sku._dict_to_sku(item)
+
+        if item['defindex'] is not None:
+            if number and not item.get('craftnumber'):
+                if item['defindex'] == 6522 and not item.get('target'):
+                    item['target'] = int(number)
+                else:
+                    item['craftnumber'] = int(number)
+
+            if item['quality'] is None:
+                defindex_item = schema.get_item_by_defindex(item['defindex'])
+                item['quality'] = defindex_item.get('item_quality', 6) if defindex_item else 6
+            return Sku._dict_to_sku(item)
         
         schema_item = schema.get_item_by_item_name_with_the(name_lower)
         if not schema_item:
             raise ValueError(f"Failed to get SKU from name: {name}")
         
         item['defindex'] = schema_item['defindex']
-        item['quality'] = item['quality'] or schema_item.get('item_quality', 6)
+        if item['quality'] is None:
+            item['quality'] = schema_item.get('item_quality', 6)
         
         if item['quality'] == 1 and item['defindex'] in schema.EXCLUSIVE_GENUINE:
             item['defindex'] = schema.EXCLUSIVE_GENUINE[item['defindex']]
@@ -521,14 +587,12 @@ class Sku:
                 item['quality'] = 6
         
         elif item['paintkit'] and 'war paint' in name_lower:
-            name_lower = f"Paintkit {item['paintkit']}"
             if not item['quality']:
                 item['quality'] = 15
-            
-            for schema_item in schema.raw['schema']['items']:
-                if schema_item.get('name') == name_lower:
-                    item['defindex'] = schema_item['defindex']
-                    break
+            if item.get('_is_mkii'):
+                item['defindex'] = 16000 + item['paintkit']
+            else:
+                item['defindex'] = 17000 + item['paintkit']
         
         return name_lower
 
